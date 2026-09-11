@@ -12,3 +12,6 @@ Deployment	        Low	                Low	            Dockerization hides OS di
 1. The "Large Diff" Problem (Python Track)
 GitHub diffs can easily exceed LLM context limits or trigger massive API token bills if a PR alters lock files (e.g., package-lock.json, go.sum) or auto-generated assets.
     *Action: Implement an early file-filtering layer in Go or Python. Immediately ignore binary files, lockfiles, and minified assets before passing the payload to the LLM.*
+
+2. GitHub Webhook Timeouts (Go Track)GitHub expects your webhook endpoint to acknowledge a payload with a 200 OK response within 10 seconds. Calling the Python service, waiting for the LLM to complete its analysis, and returning the data synchronously will frequently cross this 10-second threshold for larger PRs.
+    *Action: If a synchronous architecture causes GitHub timeout errors during Week 2, immediately pivot Go's webhook handler to save the incoming event to the database with a pending status, return a 202 Accepted to GitHub, and launch a Go goroutine (go internal.AnalyzePR(...)) to process the LLM call asynchronously in the background.*
