@@ -19,3 +19,21 @@ GitHub diffs can easily exceed LLM context limits or trigger massive API token b
 3. Inline Comment Mapping
 Posting an overall summary comment on a PR is trivial. However, posting inline findings tied to exact lines (findings.line_number) requires understanding GitHub's specific review comment API, which maps to the diff's relative line index (the "position" field in the diff hunk), not necessarily the absolute file line number.
     *Action: Dedicate extra testing time in Week 2 for the mapping logic, or fall back to posting a single beautifully formatted Markdown table of findings as a main PR comment if inline mapping becomes a blocker.*
+
+# Decision for the first bottle neck
+I think we set a limit to files that can be handled in v1, then find a way of chunking larger files in v2.
+
+In the Go service, before sending the request, cap it:
+
+If files_changed > N (say 30) or total diff size > some byte limit, just skip full analysis and send Go's existing metadata to make a decision — either:
+Truncate: send only the first N files, or
+Reject: return a friendly "PR too large to auto-review, please review manually" message from Go without ever calling Python.
+This is a single if check in one place (wherever Go builds the request), not a new subsystem. It touches no contract fields, no Python code, no frontend logic beyond maybe displaying that message.
+
+Why this doesn't complicate v1:
+
+Zero new fields in the JSON contract
+Zero changes to Python's logic
+Lives entirely in Go, as a pre-flight check
+You can literally hardcode the limit as a constant for now
+V2 later: replace that one if block with real chunking/prioritization logic (e.g. "analyze the 10 riskiest files first," or "summarize per-file, then synthesize"). Because it's isolated in one function today, swapping it out later is a contained change, not a refactor.
