@@ -92,4 +92,4 @@ Response shapes for these are **not yet locked** — finalize once Person A's `i
 
 | Date       | Change                          | Reason                                      |
 |------------|----------------------------------|----------------------------------------------|
-| (fill in)  | Initial contract locked          | Week 1 kickoff                                |
+| 14-9-2026  | Initial contract locked          | Week 1 kickoff                                |
