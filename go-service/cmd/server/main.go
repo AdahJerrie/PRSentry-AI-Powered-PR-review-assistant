@@ -5,11 +5,17 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/joho/godotenv"
+
 	"prsentry/go-service/internal/github"
 	"prsentry/go-service/internal/webhook"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, relying on real environment variables")
+	}
+
 	secret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if secret == "" {
 		log.Fatal("GITHUB_WEBHOOK_SECRET is not set")
