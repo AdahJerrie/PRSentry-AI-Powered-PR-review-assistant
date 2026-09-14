@@ -9,7 +9,11 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"prsentry/go-service/internal/github"
 )
+
+const maxPayloadBytes = 5 * 1024 * 1024 // 5 MB
 
 func verifySignature(secret string, payload []byte, signatureHeader string) bool {
 	if !strings.HasPrefix(signatureHeader, "sha256=") {
@@ -24,12 +28,20 @@ func verifySignature(secret string, payload []byte, signatureHeader string) bool
 	return hmac.Equal([]byte(computedHex), []byte(expectedHex))
 }
 
-// NewHandler returns an http.HandlerFunc configured with the given webhook secret.
-func NewHandler(secret string) http.HandlerFunc {
+// NewHandler returns an http.HandlerFunc configured with the webhook secret
+// and a GitHub client for fetching PR data.
+func NewHandler(secret string, ghClient *github.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		r.Body = http.MaxBytesReader(w, r.Body, maxPayloadBytes)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, "could not read body", http.StatusBadRequest)
+			log.Println("Body read failed (possibly too large):", err)
+			http.Error(w, "request body too large or unreadable", http.StatusRequestEntityTooLarge)
 			return
 		}
 
@@ -53,10 +65,26 @@ func NewHandler(secret string) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("PR #%d on %s needs review (action: %s)\n",
-			payload.PullRequest.Number, payload.Repository.FullName, payload.Action)
-		log.Printf("Diff URL: %s\n", payload.PullRequest.DiffURL)
-
+		// respond to GitHub immediately — we still have work to do below,
+		// but GitHub only cares that delivery succeeded
 		w.WriteHeader(http.StatusOK)
+
+		parts := strings.SplitN(payload.Repository.FullName, "/", 2)
+		if len(parts) != 2 {
+			log.Println("Unexpected repo format:", payload.Repository.FullName)
+			return
+		}
+		owner, repo := parts[0], parts[1]
+
+		files, err := ghClient.FetchPRFiles(payload.Installation.ID, owner, repo, payload.PullRequest.Number)
+		if err != nil {
+			log.Println("Failed to fetch PR files:", err)
+			return
+		}
+
+		log.Printf("Fetched %d changed file(s) for PR #%d:\n", len(files), payload.PullRequest.Number)
+		for _, f := range files {
+			log.Printf("  %s (%d bytes of diff)\n", f.Path, len(f.Diff))
+		}
 	}
 }
