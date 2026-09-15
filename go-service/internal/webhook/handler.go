@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"prsentry/go-service/internal/github"
+	"prsentry/go-service/internal/review"
 )
 
 const maxPayloadBytes = 5 * 1024 * 1024 // 5 MB
@@ -28,9 +29,10 @@ func verifySignature(secret string, payload []byte, signatureHeader string) bool
 	return hmac.Equal([]byte(computedHex), []byte(expectedHex))
 }
 
-// NewHandler returns an http.HandlerFunc configured with the webhook secret
-// and a GitHub client for fetching PR data.
-func NewHandler(secret string, ghClient *github.Client) http.HandlerFunc {
+// NewHandler returns an http.HandlerFunc configured with the webhook secret,
+// a GitHub client for fetching PR data, and a review client for submitting
+// that data to the Python analysis service.
+func NewHandler(secret string, ghClient *github.Client, reviewClient *review.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -86,5 +88,14 @@ func NewHandler(secret string, ghClient *github.Client) http.HandlerFunc {
 		for _, f := range files {
 			log.Printf("  %s (%d bytes of diff)\n", f.Path, len(f.Diff))
 		}
+
+		riskResult, err := reviewClient.SubmitForReview(payload.PullRequest.Number, files)
+		if err != nil {
+			log.Println("Failed to submit for review:", err)
+			return
+		}
+
+		log.Printf("Risk assessment for PR #%d: score=%.1f, flagged=%v\n",
+			riskResult.PRID, riskResult.RiskScore, riskResult.FlaggedFiles)
 	}
 }

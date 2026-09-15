@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"prsentry/go-service/internal/github"
+	"prsentry/go-service/internal/review"
 	"prsentry/go-service/internal/webhook"
 )
 
@@ -35,12 +36,19 @@ func main() {
 		log.Fatalf("reading private key file: %v", err)
 	}
 
+	pythonServiceURL := os.Getenv("PYTHON_SERVICE_URL")
+	if pythonServiceURL == "" {
+		log.Fatal("PYTHON_SERVICE_URL is not set")
+	}
+
 	ghClient, err := github.NewClient(appID, privateKeyPEM)
 	if err != nil {
 		log.Fatalf("creating GitHub client: %v", err)
 	}
 
-	http.HandleFunc("/webhook", webhook.NewHandler(secret, ghClient))
+	reviewClient := review.NewClient(pythonServiceURL)
+
+	http.HandleFunc("/webhook", webhook.NewHandler(secret, ghClient, reviewClient))
 
 	log.Println("Server listening on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
