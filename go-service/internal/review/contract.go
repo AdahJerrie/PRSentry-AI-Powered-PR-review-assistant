@@ -7,6 +7,5 @@ type FileDiff struct {
 
 type ReviewRequest struct {
 	PRID  int        `json:"pr_id"`
-	Repo  string     `json:"repo"`
 	Files []FileDiff `json:"files"`
 }
